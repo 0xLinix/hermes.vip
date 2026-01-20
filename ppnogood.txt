@@ -1,3 +1,4 @@
+-- ppnogood.txt
 local ESP = {}
 ESP.Enabled = false
 
@@ -10,9 +11,12 @@ local LocalPlayer = Players.LocalPlayer
 ESP.Settings = {
     Boxes = true,
     BoxFilled = false,
+
     Names = true,
     Distance = true,
+
     HealthBars = true,
+    HealthText = true,
 
     TeamCheck = false,
     NPCCheck = false,
@@ -43,13 +47,16 @@ local function Create(plr)
         BoxFill = New("Square"),
         Name = New("Text"),
         Distance = New("Text"),
-        Health = New("Line")
+        HealthBar = New("Line"),
+        HealthText = New("Text")
     }
 
+    -- Box
     Cache[plr].Box.Filled = false
     Cache[plr].BoxFill.Filled = true
     Cache[plr].BoxFill.Transparency = 0.25
 
+    -- Text
     Cache[plr].Name.Size = 13
     Cache[plr].Name.Center = true
     Cache[plr].Name.Outline = true
@@ -57,6 +64,10 @@ local function Create(plr)
     Cache[plr].Distance.Size = 12
     Cache[plr].Distance.Center = true
     Cache[plr].Distance.Outline = true
+
+    Cache[plr].HealthText.Size = 11
+    Cache[plr].HealthText.Center = true
+    Cache[plr].HealthText.Outline = true
 end
 
 local function Hide(obj)
@@ -65,6 +76,7 @@ local function Hide(obj)
     end
 end
 
+-- ================= UPDATE =================
 local function Update(plr)
     local obj = Cache[plr]
     local char = plr.Character
@@ -92,32 +104,38 @@ local function Update(plr)
         return
     end
 
-    local scale = 1 / (pos.Z * math.tan(math.rad(Camera.FieldOfView/2))*2) * 1000
-    local w, h = 4*scale, 6*scale
-    local x, y = pos.X - w/2, pos.Y - h/2
+    -- Stable box sizing
+    local scale = 1 / (pos.Z * math.tan(math.rad(Camera.FieldOfView / 2)) * 2) * 1000
+    local w, h = math.clamp(4 * scale, 25, 300), math.clamp(6 * scale, 40, 500)
+    local x, y = pos.X - w / 2, pos.Y - h / 2
 
-    -- BOX
-    obj.Box.Size = Vector2.new(w,h)
-    obj.Box.Position = Vector2.new(x,y)
-    obj.Box.Color = ESP.Colors.Enemy
-    obj.Box.Visible = ESP.Settings.Boxes
+    -- ================= BOX =================
+    if ESP.Settings.Boxes then
+        obj.Box.Size = Vector2.new(w, h)
+        obj.Box.Position = Vector2.new(x, y)
+        obj.Box.Color = ESP.Colors.Enemy
+        obj.Box.Visible = true
 
-    obj.BoxFill.Size = obj.Box.Size
-    obj.BoxFill.Position = obj.Box.Position
-    obj.BoxFill.Color = ESP.Colors.Enemy
-    obj.BoxFill.Visible = ESP.Settings.BoxFilled
+        obj.BoxFill.Size = obj.Box.Size
+        obj.BoxFill.Position = obj.Box.Position
+        obj.BoxFill.Color = ESP.Colors.Enemy
+        obj.BoxFill.Visible = ESP.Settings.BoxFilled
+    else
+        obj.Box.Visible = false
+        obj.BoxFill.Visible = false
+    end
 
-    -- NAME (ABOVE BOX)
+    -- ================= NAME =================
     if ESP.Settings.Names then
         obj.Name.Text = plr.Name
-        obj.Name.Position = Vector2.new(pos.X, y - 14)
+        obj.Name.Position = Vector2.new(pos.X, y - 15)
         obj.Name.Color = ESP.Colors.Text
         obj.Name.Visible = true
     else
         obj.Name.Visible = false
     end
 
-    -- DISTANCE (BELOW BOX)
+    -- ================= DISTANCE =================
     if ESP.Settings.Distance then
         local dist = math.floor((hrp.Position - Camera.CFrame.Position).Magnitude)
         obj.Distance.Text = dist .. "m"
@@ -128,15 +146,27 @@ local function Update(plr)
         obj.Distance.Visible = false
     end
 
-    -- HEALTH BAR
+    -- ================= HEALTH BAR =================
     if ESP.Settings.HealthBars then
-        local hp = hum.Health / hum.MaxHealth
-        obj.Health.From = Vector2.new(x - 4, y + h)
-        obj.Health.To = Vector2.new(x - 4, y + h - (h * hp))
-        obj.Health.Color = ESP.Colors.Health
-        obj.Health.Visible = true
+        local hp = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+
+        obj.HealthBar.From = Vector2.new(x - 4, y + h)
+        obj.HealthBar.To = Vector2.new(x - 4, y + h - (h * hp))
+        obj.HealthBar.Color = ESP.Colors.Health
+        obj.HealthBar.Thickness = 2
+        obj.HealthBar.Visible = true
+
+        if ESP.Settings.HealthText then
+            obj.HealthText.Text = math.floor(hp * 100) .. "%"
+            obj.HealthText.Position = Vector2.new(x - 18, y + h - (h * hp))
+            obj.HealthText.Color = ESP.Colors.Health
+            obj.HealthText.Visible = true
+        else
+            obj.HealthText.Visible = false
+        end
     else
-        obj.Health.Visible = false
+        obj.HealthBar.Visible = false
+        obj.HealthText.Visible = false
     end
 end
 
@@ -146,11 +176,15 @@ function ESP:Enable()
     self.Enabled = true
 
     for _,p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then Create(p) end
+        if p ~= LocalPlayer then
+            Create(p)
+        end
     end
 
     Players.PlayerAdded:Connect(function(p)
-        if p ~= LocalPlayer then Create(p) end
+        if p ~= LocalPlayer then
+            Create(p)
+        end
     end)
 
     RunService.RenderStepped:Connect(function()
@@ -162,7 +196,9 @@ end
 
 function ESP:Disable()
     self.Enabled = false
-    for _,obj in pairs(Cache) do Hide(obj) end
+    for _,obj in pairs(Cache) do
+        Hide(obj)
+    end
 end
 
 return ESP
