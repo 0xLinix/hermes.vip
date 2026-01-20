@@ -1,14 +1,13 @@
+local ESP = {}
+ESP.Enabled = false
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
-local ESP = {}
-
 -- ================= SETTINGS =================
 ESP.Settings = {
-    Enabled = false,
-
     Boxes = true,
     BoxFilled = false,
     Names = true,
@@ -17,56 +16,206 @@ ESP.Settings = {
     Skeleton = true,
     Snaplines = true,
 
-    TeamCheck = true,
-    NPCCheck = true,
-    HealthCheck = true,
-
-    Mode3D = false -- false = 2D (Drawing), true = 3D (Highlight)
+    TeamCheck = false,
+    NPCCheck = false,
+    HealthCheck = true
 }
 
--- ================= COLORS =================
 ESP.Colors = {
     Enemy = Color3.fromRGB(255, 80, 80),
     Team = Color3.fromRGB(80, 255, 80),
-    Skeleton = Color3.fromRGB(255, 255, 255),
-    Health = Color3.fromRGB(0, 255, 0),
-    Snapline = Color3.fromRGB(255, 255, 255)
+    Skeleton = Color3.fromRGB(255,255,255),
+    Health = Color3.fromRGB(80,255,80),
+    Snapline = Color3.fromRGB(255,255,255)
 }
 
--- ================= INTERNAL =================
-ESP.Cache = {}
+-- ================= CACHE =================
+local Cache = {}
 
-local function isValid(model)
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    local hrp = model:FindFirstChild("HumanoidRootPart")
-    if not hum or not hrp then return false end
-    if ESP.Settings.HealthCheck and hum.Health <= 0 then return false end
-    return true
+-- ================= UTILS =================
+local function New(t)
+    local d = Drawing.new(t)
+    d.Visible = false
+    d.Transparency = 1
+    return d
 end
 
-local function isNPC(model)
-    return Players:GetPlayerFromCharacter(model) == nil
+local function HideAll(obj)
+    for _,v in pairs(obj) do
+        if typeof(v) == "table" then
+            for _,l in pairs(v) do l.Visible = false end
+        elseif v.Visible ~= nil then
+            v.Visible = false
+        end
+    end
 end
 
-local function isEnemy(player)
-    if not ESP.Settings.TeamCheck then return true end
-    return player.Team ~= LocalPlayer.Team
-end
-
--- ================= DRAW CREATE =================
-local function createDrawings(model)
-    ESP.Cache[model] = {
-        Box = Drawing.new("Square"),
-        Name = Drawing.new("Text"),
-        Distance = Drawing.new("Text"),
-        Health = Drawing.new("Line"),
-        Snapline = Drawing.new("Line"),
+-- ================= CREATE =================
+local function CreatePlayer(plr)
+    Cache[plr] = {
+        Box = New("Square"),
+        BoxFill = New("Square"),
+        Name = New("Text"),
+        Distance = New("Text"),
+        HealthBar = New("Line"),
+        Snapline = New("Line"),
         Skeleton = {}
     }
 
-    for _,d in pairs(ESP.Cache[model]) do
-        if typeof(d) == "table" then continue end
-        d.Visible = false
+    Cache[plr].Name.Center = true
+    Cache[plr].Distance.Center = true
+end
+
+-- ================= SKELETON =================
+local Bones = {
+    {"Head","UpperTorso"},
+    {"UpperTorso","LowerTorso"},
+    {"UpperTorso","LeftUpperArm"},
+    {"LeftUpperArm","LeftLowerArm"},
+    {"UpperTorso","RightUpperArm"},
+    {"RightUpperArm","RightLowerArm"},
+    {"LowerTorso","LeftUpperLeg"},
+    {"LeftUpperLeg","LeftLowerLeg"},
+    {"LowerTorso","RightUpperLeg"},
+    {"RightUpperLeg","RightLowerLeg"}
+}
+
+local function UpdateSkeleton(plr, char)
+    local skel = Cache[plr].Skeleton
+    for i,b in ipairs(Bones) do
+        skel[i] = skel[i] or New("Line")
+        local a,bp = char:FindFirstChild(b[1]), char:FindFirstChild(b[2])
+        if a and bp then
+            local pa,va = Camera:WorldToViewportPoint(a.Position)
+            local pb,vb = Camera:WorldToViewportPoint(bp.Position)
+            if va and vb then
+                skel[i].From = Vector2.new(pa.X,pa.Y)
+                skel[i].To = Vector2.new(pb.X,pb.Y)
+                skel[i].Color = ESP.Colors.Skeleton
+                skel[i].Visible = ESP.Settings.Skeleton
+            else
+                skel[i].Visible = false
+            end
+        else
+            skel[i].Visible = false
+        end
+    end
+end
+
+-- ================= UPDATE =================
+local function Update(plr)
+    local obj = Cache[plr]
+    local char = plr.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+    if not ESP.Enabled or not char or not hum or not hrp then
+        HideAll(obj)
+        return
+    end
+
+    if ESP.Settings.HealthCheck and hum.Health <= 0 then
+        HideAll(obj)
+        return
+    end
+
+    if ESP.Settings.TeamCheck and plr.Team == LocalPlayer.Team then
+        HideAll(obj)
+        return
+    end
+
+    local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+    if not onScreen then
+        HideAll(obj)
+        return
+    end
+
+    -- === BOX ===
+    local scale = 1 / (pos.Z * math.tan(math.rad(Camera.FieldOfView/2))*2) * 1000
+    local w,h = 4*scale,6*scale
+    local x,y = pos.X-w/2,pos.Y-h/2
+
+    obj.Box.Size = Vector2.new(w,h)
+    obj.Box.Position = Vector2.new(x,y)
+    obj.Box.Color = ESP.Colors.Enemy
+    obj.Box.Visible = ESP.Settings.Boxes
+
+    obj.BoxFill.Size = obj.Box.Size
+    obj.BoxFill.Position = obj.Box.Position
+    obj.BoxFill.Color = ESP.Colors.Enemy
+    obj.BoxFill.Transparency = 0.3
+    obj.BoxFill.Visible = ESP.Settings.BoxFilled
+
+    -- === NAME ABOVE BOX ===
+    if ESP.Settings.Names then
+        obj.Name.Text = plr.Name
+        obj.Name.Position = Vector2.new(pos.X, y - 14)
+        obj.Name.Visible = true
+    else
+        obj.Name.Visible = false
+    end
+
+    -- === DISTANCE (STABLE) ===
+    if ESP.Settings.Distance then
+        local dist = math.floor((hrp.Position - Camera.CFrame.Position).Magnitude)
+        obj.Distance.Text = dist.."m"
+        obj.Distance.Position = Vector2.new(pos.X, y + h + 2)
+        obj.Distance.Visible = true
+    else
+        obj.Distance.Visible = false
+    end
+
+    -- === HEALTH BAR ===
+    if ESP.Settings.HealthBars then
+        local hp = hum.Health / hum.MaxHealth
+        obj.HealthBar.From = Vector2.new(x-4, y+h)
+        obj.HealthBar.To = Vector2.new(x-4, y+h-(h*hp))
+        obj.HealthBar.Color = ESP.Colors.Health
+        obj.HealthBar.Visible = true
+    else
+        obj.HealthBar.Visible = false
+    end
+
+    -- === SNAPLINE ===
+    if ESP.Settings.Snaplines then
+        obj.Snapline.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
+        obj.Snapline.To = Vector2.new(pos.X,pos.Y)
+        obj.Snapline.Color = ESP.Colors.Snapline
+        obj.Snapline.Visible = true
+    else
+        obj.Snapline.Visible = false
+    end
+
+    -- === SKELETON ===
+    if ESP.Settings.Skeleton then
+        UpdateSkeleton(plr,char)
+    end
+end
+
+-- ================= LOOP =================
+function ESP:Enable()
+    if self.Enabled then return end
+    self.Enabled = true
+
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then CreatePlayer(p) end
+    end
+
+    Players.PlayerAdded:Connect(function(p)
+        if p ~= LocalPlayer then CreatePlayer(p) end
+    end)
+
+    RunService.RenderStepped:Connect(function()
+        for p in pairs(Cache) do Update(p) end
+    end)
+end
+
+function ESP:Disable()
+    self.Enabled = false
+    for _,obj in pairs(Cache) do HideAll(obj) end
+end
+
+return ESP
         d.Thickness = 1
     end
 end
@@ -173,3 +322,4 @@ function ESP:Disable()
 end
 
 return ESP
+
