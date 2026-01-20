@@ -1,3 +1,4 @@
+
 -- / Locals
 local Workspace = game:GetService("Workspace")
 local Player = game:GetService("Players").LocalPlayer
@@ -1052,7 +1053,7 @@ function library:Init(key)
         page.MidImage = "http://www.roblox.com/asset/?id=3062506202"
         page.ScrollBarThickness = 1
         page.TopImage = "http://www.roblox.com/asset/?id=3062506202"
-        page.ScrollBarImageColor3 = Color3.fromRGB(159, 115, 255)
+        page.ScrollBarImageColor3 = Color3.fromRGB(8,122,188)
         page.Visible = false
         
         pageLayout.Name = "pageLayout"
@@ -1070,7 +1071,7 @@ function library:Init(key)
 
         if TabLibrary.IsFirst then
             page.Visible = true
-            tabButton.TextColor3 = Color3.fromRGB(159, 115, 255)
+            tabButton.TextColor3 = Color3.fromRGB(8,122,188)
             TabLibrary.CurrentTab = title
         end
         
