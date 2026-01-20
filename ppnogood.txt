@@ -7,113 +7,168 @@ local ESP = {}
 
 -- ================= SETTINGS =================
 ESP.Settings = {
-    Boxes = false,
-    Names = false,
-    Distance = false,
-    HealthBars = false,
-    Skeleton = false,
-    Arrows = false,
-    TeamCheck = false
+    Enabled = false,
+
+    Boxes = true,
+    BoxFilled = false,
+    Names = true,
+    Distance = true,
+    HealthBars = true,
+    Skeleton = true,
+    Snaplines = true,
+
+    TeamCheck = true,
+    NPCCheck = true,
+    HealthCheck = true,
+
+    Mode3D = false -- false = 2D (Drawing), true = 3D (Highlight)
 }
 
 -- ================= COLORS =================
 ESP.Colors = {
-    Enemy = Color3.fromRGB(255, 70, 70),
-    Team = Color3.fromRGB(70, 255, 70),
+    Enemy = Color3.fromRGB(255, 80, 80),
+    Team = Color3.fromRGB(80, 255, 80),
     Skeleton = Color3.fromRGB(255, 255, 255),
     Health = Color3.fromRGB(0, 255, 0),
-    Arrow = Color3.fromRGB(255, 255, 255)
+    Snapline = Color3.fromRGB(255, 255, 255)
 }
 
-ESP.Enabled = false
-ESP.Objects = {}
-
 -- ================= INTERNAL =================
-local function isEnemy(plr)
+ESP.Cache = {}
+
+local function isValid(model)
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    local hrp = model:FindFirstChild("HumanoidRootPart")
+    if not hum or not hrp then return false end
+    if ESP.Settings.HealthCheck and hum.Health <= 0 then return false end
+    return true
+end
+
+local function isNPC(model)
+    return Players:GetPlayerFromCharacter(model) == nil
+end
+
+local function isEnemy(player)
     if not ESP.Settings.TeamCheck then return true end
-    return plr.Team ~= LocalPlayer.Team
+    return player.Team ~= LocalPlayer.Team
 end
 
-local function cleanup(plr)
-    if ESP.Objects[plr] then
-        for _,d in pairs(ESP.Objects[plr]) do
-            d:Remove()
-        end
-        ESP.Objects[plr] = nil
-    end
-end
-
-local function create(plr)
-    ESP.Objects[plr] = {
-        box = Drawing.new("Square"),
-        name = Drawing.new("Text"),
-        dist = Drawing.new("Text"),
-        hp = Drawing.new("Line"),
-        arrow = Drawing.new("Triangle")
+-- ================= DRAW CREATE =================
+local function createDrawings(model)
+    ESP.Cache[model] = {
+        Box = Drawing.new("Square"),
+        Name = Drawing.new("Text"),
+        Distance = Drawing.new("Text"),
+        Health = Drawing.new("Line"),
+        Snapline = Drawing.new("Line"),
+        Skeleton = {}
     }
 
-    for _,d in pairs(ESP.Objects[plr]) do
+    for _,d in pairs(ESP.Cache[model]) do
+        if typeof(d) == "table" then continue end
         d.Visible = false
         d.Thickness = 1
     end
 end
 
+local function removeDrawings(model)
+    if ESP.Cache[model] then
+        for _,d in pairs(ESP.Cache[model]) do
+            if typeof(d) == "table" then
+                for _,l in pairs(d) do l:Remove() end
+            else
+                d:Remove()
+            end
+        end
+        ESP.Cache[model] = nil
+    end
+end
+
 -- ================= UPDATE LOOP =================
 RunService.RenderStepped:Connect(function()
-    if not ESP.Enabled then return end
+    if not ESP.Settings.Enabled then return end
 
-    for _,plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            if not isEnemy(plr) then
-                cleanup(plr)
+    for _,model in ipairs(workspace:GetChildren()) do
+        if model:IsA("Model") and isValid(model) then
+            local hrp = model.HumanoidRootPart
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            local player = Players:GetPlayerFromCharacter(model)
+
+            if player == LocalPlayer then continue end
+            if ESP.Settings.NPCCheck and player == nil then continue end
+            if player and not isEnemy(player) then continue end
+
+            if not ESP.Cache[model] then
+                createDrawings(model)
+            end
+
+            local pos, onscreen = Camera:WorldToViewportPoint(hrp.Position)
+            local drawings = ESP.Cache[model]
+            local color = player and ESP.Colors.Enemy or ESP.Colors.Team
+
+            if not onscreen then
+                for _,d in pairs(drawings) do
+                    if typeof(d) ~= "table" then d.Visible = false end
+                end
                 continue
             end
 
-            if not ESP.Objects[plr] then
-                create(plr)
-            end
-
-            local hrp = plr.Character.HumanoidRootPart
-            local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-            local objs = ESP.Objects[plr]
-            local color = isEnemy(plr) and ESP.Colors.Enemy or ESP.Colors.Team
+            local scale = math.clamp(2000 / (Camera.CFrame.Position - hrp.Position).Magnitude, 20, 100)
+            local width, height = scale * 0.6, scale
 
             -- BOX
-            objs.box.Visible = ESP.Settings.Boxes and onScreen
-            objs.box.Color = color
-            objs.box.Size = Vector2.new(40, 60)
-            objs.box.Position = Vector2.new(pos.X - 20, pos.Y - 30)
+            drawings.Box.Visible = ESP.Settings.Boxes
+            drawings.Box.Filled = ESP.Settings.BoxFilled
+            drawings.Box.Size = Vector2.new(width, height)
+            drawings.Box.Position = Vector2.new(pos.X - width/2, pos.Y - height/2)
+            drawings.Box.Color = color
 
-            -- NAME
-            objs.name.Visible = ESP.Settings.Names and onScreen
-            objs.name.Text = plr.Name
-            objs.name.Position = Vector2.new(pos.X, pos.Y - 40)
-            objs.name.Color = color
-            objs.name.Size = 13
-            objs.name.Center = true
+            -- NAME (above head)
+            local head = model:FindFirstChild("Head")
+            if head then
+                local hpos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+                drawings.Name.Visible = ESP.Settings.Names
+                drawings.Name.Text = player and player.Name or "NPC"
+                drawings.Name.Position = Vector2.new(hpos.X, hpos.Y - 15)
+                drawings.Name.Center = true
+                drawings.Name.Size = 13
+                drawings.Name.Color = color
+            end
 
             -- DISTANCE
-            objs.dist.Visible = ESP.Settings.Distance and onScreen
-            objs.dist.Text = math.floor((hrp.Position - Camera.CFrame.Position).Magnitude).."m"
-            objs.dist.Position = Vector2.new(pos.X, pos.Y + 35)
-            objs.dist.Color = color
-            objs.dist.Size = 12
-            objs.dist.Center = true
-        else
-            cleanup(plr)
+            drawings.Distance.Visible = ESP.Settings.Distance
+            drawings.Distance.Text = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude).."m"
+            drawings.Distance.Position = Vector2.new(pos.X, pos.Y + height/2 + 2)
+            drawings.Distance.Center = true
+            drawings.Distance.Size = 12
+            drawings.Distance.Color = color
+
+            -- HEALTH BAR
+            drawings.Health.Visible = ESP.Settings.HealthBars
+            local hpPerc = hum.Health / hum.MaxHealth
+            drawings.Health.From = Vector2.new(pos.X - width/2 - 4, pos.Y + height/2)
+            drawings.Health.To = Vector2.new(pos.X - width/2 - 4, pos.Y + height/2 - (height * hpPerc))
+            drawings.Health.Color = ESP.Colors.Health
+            drawings.Health.Thickness = 2
+
+            -- SNAPLINE
+            drawings.Snapline.Visible = ESP.Settings.Snaplines
+            drawings.Snapline.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
+            drawings.Snapline.To = Vector2.new(pos.X, pos.Y)
+            drawings.Snapline.Color = ESP.Colors.Snapline
         end
     end
 end)
 
 -- ================= PUBLIC =================
 function ESP:Enable()
-    ESP.Enabled = true
+    ESP.Settings.Enabled = true
 end
 
 function ESP:Disable()
-    ESP.Enabled = false
-    for plr in pairs(ESP.Objects) do
-        cleanup(plr)
+    ESP.Settings.Enabled = false
+    for model in pairs(ESP.Cache) do
+        removeDrawings(model)
     end
 end
 
