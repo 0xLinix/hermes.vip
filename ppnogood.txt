@@ -2,190 +2,167 @@ local ESP = {}
 ESP.Enabled = false
 
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
 
 -- ================= SETTINGS =================
 ESP.Settings = {
     Boxes = true,
+    BoxFilled = false,
     Names = true,
     Distance = true,
     HealthBars = true,
 
     TeamCheck = false,
-    NPCCheck = true,
+    NPCCheck = false,
     HealthCheck = true
 }
 
 ESP.Colors = {
     Enemy = Color3.fromRGB(8,122,188),
-    Team = Color3.fromRGB(8,122,188),
-    Health = Color3.fromRGB(8,122,188),
-    NPC = Color3.fromRGB(255,170,0)
+    Team = Color3.fromRGB(80,255,80),
+    Health = Color3.fromRGB(80,255,80),
+    Text = Color3.new(1,1,1)
 }
 
 -- ================= CACHE =================
 local Cache = {}
 
--- ================= UTILS =================
-local function IsValidCharacter(model)
-    if not model or not model:IsA("Model") then return false end
-    if not model:FindFirstChildOfClass("Humanoid") then return false end
-    if not model:FindFirstChild("HumanoidRootPart") then return false end
-    return true
+local function New(t)
+    local d = Drawing.new(t)
+    d.Visible = false
+    d.Thickness = 1
+    d.Transparency = 1
+    return d
 end
 
-local function IsNPC(model)
-    return IsValidCharacter(model)
-        and not Players:GetPlayerFromCharacter(model)
-end
-
--- ================= CREATE =================
-local function Create(model, isNPC)
-    if Cache[model] or not IsValidCharacter(model) then return end
-
-    local h = Instance.new("Highlight")
-    h.Enabled = false
-    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    h.FillTransparency = 0.7
-    h.OutlineTransparency = 0
-    h.Parent = game.CoreGui
-
-    local bb = Instance.new("BillboardGui")
-    bb.AlwaysOnTop = true
-    bb.Size = UDim2.new(0, 220, 0, 60)
-    bb.StudsOffset = Vector3.new(0, 3, 0)
-    bb.Enabled = false
-    bb.Parent = game.CoreGui
-
-    local txt = Instance.new("TextLabel")
-    txt.Size = UDim2.fromScale(1, 1)
-    txt.BackgroundTransparency = 1
-    txt.TextColor3 = Color3.new(1,1,1)
-    txt.TextStrokeTransparency = 0
-    txt.Font = Enum.Font.GothamBold
-    txt.TextScaled = true
-    txt.Parent = bb
-
-    Cache[model] = {
-        Highlight = h,
-        Billboard = bb,
-        Text = txt,
-        NPC = isNPC
+local function Create(plr)
+    Cache[plr] = {
+        Box = New("Square"),
+        BoxFill = New("Square"),
+        Name = New("Text"),
+        Distance = New("Text"),
+        Health = New("Line")
     }
+
+    Cache[plr].Box.Filled = false
+    Cache[plr].BoxFill.Filled = true
+    Cache[plr].BoxFill.Transparency = 0.25
+
+    Cache[plr].Name.Size = 13
+    Cache[plr].Name.Center = true
+    Cache[plr].Name.Outline = true
+
+    Cache[plr].Distance.Size = 12
+    Cache[plr].Distance.Center = true
+    Cache[plr].Distance.Outline = true
 end
 
 local function Hide(obj)
-    obj.Highlight.Enabled = false
-    obj.Billboard.Enabled = false
+    for _,v in pairs(obj) do
+        v.Visible = false
+    end
 end
 
--- ================= UPDATE =================
-local function Update(model)
-    local obj = Cache[model]
-    if not obj then return end
-    if not IsValidCharacter(model) then
+local function Update(plr)
+    local obj = Cache[plr]
+    local char = plr.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+    if not ESP.Enabled or not char or not hum or not hrp then
         Hide(obj)
         return
     end
-
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    local hrp = model:FindFirstChild("HumanoidRootPart")
 
     if ESP.Settings.HealthCheck and hum.Health <= 0 then
         Hide(obj)
         return
     end
 
-    local plr = Players:GetPlayerFromCharacter(model)
-
-    if plr and ESP.Settings.TeamCheck and LocalPlayer.Team == plr.Team then
+    if ESP.Settings.TeamCheck and plr.Team == LocalPlayer.Team then
         Hide(obj)
         return
     end
 
-    local color = obj.NPC and ESP.Colors.NPC or ESP.Colors.Enemy
-
-    -- HIGHLIGHT
-    if ESP.Settings.Boxes then
-        obj.Highlight.Adornee = model
-        obj.Highlight.FillColor = color
-        obj.Highlight.OutlineColor = color
-        obj.Highlight.Enabled = true
-    else
-        obj.Highlight.Enabled = false
+    local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+    if not onScreen then
+        Hide(obj)
+        return
     end
 
-    -- TEXT
-    local lines = {}
+    local scale = 1 / (pos.Z * math.tan(math.rad(Camera.FieldOfView/2))*2) * 1000
+    local w, h = 4*scale, 6*scale
+    local x, y = pos.X - w/2, pos.Y - h/2
 
+    -- BOX
+    obj.Box.Size = Vector2.new(w,h)
+    obj.Box.Position = Vector2.new(x,y)
+    obj.Box.Color = ESP.Colors.Enemy
+    obj.Box.Visible = ESP.Settings.Boxes
+
+    obj.BoxFill.Size = obj.Box.Size
+    obj.BoxFill.Position = obj.Box.Position
+    obj.BoxFill.Color = ESP.Colors.Enemy
+    obj.BoxFill.Visible = ESP.Settings.BoxFilled
+
+    -- NAME (ABOVE BOX)
     if ESP.Settings.Names then
-        table.insert(lines, plr and plr.Name or "NPC")
-    end
-
-    if ESP.Settings.HealthBars then
-        local hp = math.floor((hum.Health / hum.MaxHealth) * 100)
-        table.insert(lines, "HP: "..hp.."%")
-    end
-
-    if ESP.Settings.Distance and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local dist = math.floor(
-            (hrp.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-        )
-        table.insert(lines, dist.."m")
-    end
-
-    if #lines > 0 then
-        obj.Text.Text = table.concat(lines, "\n")
-        obj.Billboard.Adornee = hrp
-        obj.Billboard.Enabled = true
+        obj.Name.Text = plr.Name
+        obj.Name.Position = Vector2.new(pos.X, y - 14)
+        obj.Name.Color = ESP.Colors.Text
+        obj.Name.Visible = true
     else
-        obj.Billboard.Enabled = false
+        obj.Name.Visible = false
+    end
+
+    -- DISTANCE (BELOW BOX)
+    if ESP.Settings.Distance then
+        local dist = math.floor((hrp.Position - Camera.CFrame.Position).Magnitude)
+        obj.Distance.Text = dist .. "m"
+        obj.Distance.Position = Vector2.new(pos.X, y + h + 2)
+        obj.Distance.Color = ESP.Colors.Text
+        obj.Distance.Visible = true
+    else
+        obj.Distance.Visible = false
+    end
+
+    -- HEALTH BAR
+    if ESP.Settings.HealthBars then
+        local hp = hum.Health / hum.MaxHealth
+        obj.Health.From = Vector2.new(x - 4, y + h)
+        obj.Health.To = Vector2.new(x - 4, y + h - (h * hp))
+        obj.Health.Color = ESP.Colors.Health
+        obj.Health.Visible = true
+    else
+        obj.Health.Visible = false
     end
 end
 
--- ================= ENABLE =================
+-- ================= LOOP =================
 function ESP:Enable()
     if self.Enabled then return end
     self.Enabled = true
 
-    -- PLAYERS
     for _,p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            Create(p.Character, false)
-        end
+        if p ~= LocalPlayer then Create(p) end
     end
 
     Players.PlayerAdded:Connect(function(p)
-        p.CharacterAdded:Connect(function(c)
-            Create(c, false)
-        end)
+        if p ~= LocalPlayer then Create(p) end
     end)
 
-    -- NPCs (SAFE)
-    if ESP.Settings.NPCCheck then
-        Workspace.DescendantAdded:Connect(function(m)
-            if IsNPC(m) then
-                task.wait(0.1)
-                Create(m, true)
-            end
-        end)
-    end
-
     RunService.RenderStepped:Connect(function()
-        for model in pairs(Cache) do
-            Update(model)
+        for p in pairs(Cache) do
+            Update(p)
         end
     end)
 end
 
--- ================= DISABLE =================
 function ESP:Disable()
     self.Enabled = false
-    for _,obj in pairs(Cache) do
-        Hide(obj)
-    end
+    for _,obj in pairs(Cache) do Hide(obj) end
 end
 
 return ESP
