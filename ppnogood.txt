@@ -4,30 +4,41 @@ ESP.Enabled = false
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
+-- ================= SETTINGS =================
 ESP.Settings = {
     Boxes = true,
-    BoxFilled = false,
     Names = true,
     Distance = true,
     HealthBars = true,
 
     TeamCheck = false,
-    NPCCheck = false,
+    NPCCheck = true,
     HealthCheck = true
 }
 
 ESP.Colors = {
-    Enemy = Color3.fromRGB((8,122,188),
-    Team = Color3.fromRGB((8,122,188),
-    Health = Color3.fromRGB((8,122,188)
+    Enemy = Color3.fromRGB(8,122,188),
+    Team = Color3.fromRGB(8,122,188),
+    Health = Color3.fromRGB(8,122,188),
+    NPC = Color3.fromRGB(255, 170, 0)
 }
 
+-- ================= CACHE =================
 local Cache = {}
 
+-- ================= UTILS =================
+local function IsNPC(model)
+    return model
+        and model:IsA("Model")
+        and model:FindFirstChildOfClass("Humanoid")
+        and not Players:GetPlayerFromCharacter(model)
+end
+
 -- ================= CREATE =================
-local function Create(plr)
-    if Cache[plr] then return end
+local function Create(model, isNPC)
+    if Cache[model] then return end
 
     local h = Instance.new("Highlight")
     h.Enabled = false
@@ -38,13 +49,13 @@ local function Create(plr)
 
     local bb = Instance.new("BillboardGui")
     bb.AlwaysOnTop = true
-    bb.Size = UDim2.new(0,200,0,50)
-    bb.StudsOffset = Vector3.new(0,3,0)
+    bb.Size = UDim2.new(0, 220, 0, 60)
+    bb.StudsOffset = Vector3.new(0, 3, 0)
     bb.Enabled = false
     bb.Parent = game.CoreGui
 
     local txt = Instance.new("TextLabel")
-    txt.Size = UDim2.fromScale(1,1)
+    txt.Size = UDim2.fromScale(1, 1)
     txt.BackgroundTransparency = 1
     txt.TextColor3 = Color3.new(1,1,1)
     txt.TextStrokeTransparency = 0
@@ -52,7 +63,12 @@ local function Create(plr)
     txt.TextScaled = true
     txt.Parent = bb
 
-    Cache[plr] = {Highlight=h, Billboard=bb, Text=txt}
+    Cache[model] = {
+        Highlight = h,
+        Billboard = bb,
+        Text = txt,
+        NPC = isNPC
+    }
 end
 
 local function Hide(obj)
@@ -61,13 +77,15 @@ local function Hide(obj)
 end
 
 -- ================= UPDATE =================
-local function Update(plr)
-    local obj = Cache[plr]
-    local char = plr.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+local function Update(model)
+    local obj = Cache[model]
+    if not obj then return end
 
-    if not ESP.Enabled or not char or not hum or not hrp then
+    local char = model
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+
+    if not ESP.Enabled or not hum or not hrp then
         Hide(obj)
         return
     end
@@ -77,28 +95,49 @@ local function Update(plr)
         return
     end
 
-    if ESP.Settings.TeamCheck and plr.Team == LocalPlayer.Team then
+    local plr = Players:GetPlayerFromCharacter(char)
+
+    if plr and ESP.Settings.TeamCheck and plr.Team == LocalPlayer.Team then
         Hide(obj)
         return
     end
 
+    -- COLOR PICK
+    local color =
+        obj.NPC and ESP.Colors.NPC or
+        (plr and ESP.Colors.Enemy or ESP.Colors.Enemy)
+
     -- HIGHLIGHT
     if ESP.Settings.Boxes then
         obj.Highlight.Adornee = char
+        obj.Highlight.FillColor = color
+        obj.Highlight.OutlineColor = color
         obj.Highlight.Enabled = true
-        obj.Highlight.FillColor = ESP.Colors.Enemy
-        obj.Highlight.OutlineColor = ESP.Colors.Enemy
     else
         obj.Highlight.Enabled = false
     end
 
-    -- TEXT
-    if ESP.Settings.Names or ESP.Settings.Distance then
-        local dist = math.floor((hrp.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude)
-        obj.Text.Text =
-            (ESP.Settings.Names and plr.Name or "") ..
-            (ESP.Settings.Distance and ("\n"..dist.."m") or "")
+    -- TEXT BUILD
+    local lines = {}
 
+    if ESP.Settings.Names then
+        table.insert(lines, plr and plr.Name or "NPC")
+    end
+
+    if ESP.Settings.HealthBars then
+        local hp = math.floor((hum.Health / hum.MaxHealth) * 100)
+        table.insert(lines, "HP: "..hp.."%")
+    end
+
+    if ESP.Settings.Distance and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local dist = math.floor(
+            (hrp.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+        )
+        table.insert(lines, dist.."m")
+    end
+
+    if #lines > 0 then
+        obj.Text.Text = table.concat(lines, "\n")
         obj.Billboard.Adornee = hrp
         obj.Billboard.Enabled = true
     else
@@ -106,26 +145,47 @@ local function Update(plr)
     end
 end
 
--- ================= LOOP =================
+-- ================= ENABLE =================
 function ESP:Enable()
     if self.Enabled then return end
     self.Enabled = true
 
+    -- Players
     for _,p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then Create(p) end
+        if p ~= LocalPlayer and p.Character then
+            Create(p.Character, false)
+        end
     end
 
     Players.PlayerAdded:Connect(function(p)
-        if p ~= LocalPlayer then Create(p) end
+        p.CharacterAdded:Connect(function(c)
+            Create(c, false)
+        end)
     end)
 
+    -- NPCs
+    if ESP.Settings.NPCCheck then
+        for _,m in ipairs(Workspace:GetDescendants()) do
+            if IsNPC(m) then
+                Create(m, true)
+            end
+        end
+
+        Workspace.DescendantAdded:Connect(function(m)
+            if ESP.Settings.NPCCheck and IsNPC(m) then
+                Create(m, true)
+            end
+        end)
+    end
+
     RunService.RenderStepped:Connect(function()
-        for p,obj in pairs(Cache) do
-            Update(p)
+        for model in pairs(Cache) do
+            Update(model)
         end
     end)
 end
 
+-- ================= DISABLE =================
 function ESP:Disable()
     self.Enabled = false
     for _,obj in pairs(Cache) do
