@@ -1,0 +1,188 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+
+local ESP = {}
+ESP.Enabled = false
+ESP.Connections = {}
+ESP.Objects = {}
+ESP.Arrows = {}
+
+ESP.Settings = {
+    Boxes = true,
+    Chams = true,
+    Arrows = true,
+    TeamCheck = true,
+    MaxDistance = 1500,
+}
+
+local function newSquare(props)
+    local s = Drawing.new("Square")
+    for k,v in pairs(props) do s[k] = v end
+    return s
+end
+
+local function newTriangle(props)
+    local t = Drawing.new("Triangle")
+    for k,v in pairs(props) do t[k] = v end
+    return t
+end
+
+local function disconnectAll(tbl)
+    for _,c in ipairs(tbl) do
+        c:Disconnect()
+    end
+    table.clear(tbl)
+end
+
+local ChamsFolder = Instance.new("Folder")
+ChamsFolder.Name = "hermes.vip_chams"
+ChamsFolder.Parent = CoreGui
+
+local function createChams(player)
+    local h = Instance.new("Highlight")
+    h.FillColor = Color3.fromRGB(255, 80, 80)
+    h.OutlineColor = Color3.fromRGB(255, 255, 255)
+    h.FillTransparency = 0.4
+    h.OutlineTransparency = 0
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.Parent = ChamsFolder
+    return h
+end
+
+local function setupPlayer(player)
+    if player == LocalPlayer then return end
+
+    ESP.Objects[player] = {
+        Box = newSquare({
+            Thickness = 1,
+            Filled = false,
+            Color = Color3.fromRGB(255,255,255),
+            Visible = false
+        }),
+        Arrow = newTriangle({
+            Filled = true,
+            Color = Color3.fromRGB(255,255,255),
+            Visible = false
+        }),
+        Chams = createChams(player)
+    }
+end
+
+local function removePlayer(player)
+    local obj = ESP.Objects[player]
+    if not obj then return end
+
+    for _,v in pairs(obj) do
+        if typeof(v) == "Instance" then
+            v:Destroy()
+        else
+            v:Remove()
+        end
+    end
+
+    ESP.Objects[player] = nil
+end
+
+local function updateESP()
+    for player, data in pairs(ESP.Objects) do
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChild("Humanoid")
+
+        if not char or not hrp or not hum or hum.Health <= 0 then
+            data.Box.Visible = false
+            data.Arrow.Visible = false
+            data.Chams.Enabled = false
+            continue
+        end
+
+        if ESP.Settings.TeamCheck and player.Team == LocalPlayer.Team then
+            data.Box.Visible = false
+            data.Arrow.Visible = false
+            data.Chams.Enabled = false
+            continue
+        end
+
+        local distance = (Camera.CFrame.Position - hrp.Position).Magnitude
+        if distance > ESP.Settings.MaxDistance then
+            data.Box.Visible = false
+            data.Arrow.Visible = false
+            data.Chams.Enabled = false
+            continue
+        end
+
+        -- CHAMS
+        data.Chams.Enabled = ESP.Settings.Chams
+        data.Chams.Adornee = char
+
+        local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+
+        -- BOX
+        if ESP.Settings.Boxes and onScreen then
+            data.Box.Size = Vector2.new(40, 65)
+            data.Box.Position = Vector2.new(pos.X - 20, pos.Y - 32)
+            data.Box.Visible = true
+        else
+            data.Box.Visible = false
+        end
+
+        -- ARROW (OFFSCREEN)
+        if ESP.Settings.Arrows and not onScreen then
+            local dir = (hrp.Position - Camera.CFrame.Position).Unit
+            local angle = math.atan2(dir.Z, dir.X)
+
+            local center = Camera.ViewportSize / 2
+            local radius = 250
+
+            local arrowPos = Vector2.new(
+                center.X + math.cos(angle) * radius,
+                center.Y + math.sin(angle) * radius
+            )
+
+            data.Arrow.PointA = arrowPos
+            data.Arrow.PointB = arrowPos + Vector2.new(-10, -5)
+            data.Arrow.PointC = arrowPos + Vector2.new(-10, 5)
+            data.Arrow.Visible = true
+        else
+            data.Arrow.Visible = false
+        end
+    end
+end
+
+function ESP:Enable()
+    if self.Enabled then return end
+    self.Enabled = true
+
+    for _,p in ipairs(Players:GetPlayers()) do
+        setupPlayer(p)
+    end
+
+    table.insert(self.Connections,
+        Players.PlayerAdded:Connect(setupPlayer)
+    )
+
+    table.insert(self.Connections,
+        Players.PlayerRemoving:Connect(removePlayer)
+    )
+
+    table.insert(self.Connections,
+        RunService.RenderStepped:Connect(updateESP)
+    )
+end
+
+function ESP:Disable()
+    if not self.Enabled then return end
+    self.Enabled = false
+
+    disconnectAll(self.Connections)
+
+    for p in pairs(self.Objects) do
+        removePlayer(p)
+    end
+end
+
+return ESP
