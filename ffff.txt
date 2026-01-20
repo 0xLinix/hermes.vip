@@ -1,91 +1,4 @@
--- / Locals
-local Workspace = game:GetService("Workspace")
-local Player = game:GetService("Players").LocalPlayer
-local Mouse = Player:GetMouse()
-
--- / Services
-local UserInputService = game:GetService("UserInputService")
-local TextService = game:GetService("TextService")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
-local CoreGuiService = game:GetService("CoreGui")
-local ContentService = game:GetService("ContentProvider")
-local TeleportService = game:GetService("TeleportService")
-
--- / Tween table & function
-local TweenTable = {
-    Default = {
-        TweenInfo.new(0.17, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 0, false, 0)
-    }
-}
-local CreateTween = function(name, speed, style, direction, loop, reverse, delay)
-    name = name
-    speed = speed or 0.17
-    style = style or Enum.EasingStyle.Sine
-    direction = direction or Enum.EasingDirection.InOut
-    loop = loop or 0
-    reverse = reverse or false
-    delay = delay or 0
-
-    TweenTable[name] = TweenInfo.new(speed, style, direction, loop, reverse, delay)
-end
-
--- / Dragging
-local drag = function(obj, latency)
-    obj = obj
-    latency = latency or 0.06
-
-    toggled = nil
-    input = nil
-    start = nil
-
-    function updateInput(input)
-        local Delta = input.Position - start
-        local Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + Delta.X, startPos.Y.Scale, startPos.Y.Offset + Delta.Y)
-        TweenService:Create(obj, TweenInfo.new(latency), {Position = Position}):Play()
-    end
-
-    obj.InputBegan:Connect(function(inp)
-        if (inp.UserInputType == Enum.UserInputType.MouseButton1) then
-            toggled = true
-            start = inp.Position
-            startPos = obj.Position
-            inp.Changed:Connect(function()
-                if (inp.UserInputState == Enum.UserInputState.End) then
-                    toggled = false
-                end
-            end)
-        end
-    end)
-
-    obj.InputChanged:Connect(function(inp)
-        if (inp.UserInputType == Enum.UserInputType.MouseMovement) then
-            input = inp
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(inp)
-        if (inp == input and toggled) then
-            updateInput(inp)
-        end
-    end)
-end
-
-local library = {
-    version = "1.0",
-    title = title or "hermes.vip" .. tostring(math.random(1,366)),
-    fps = 0,
-    rank = "private"
-}
-
-coroutine.wrap(function()
-    RunService.RenderStepped:Connect(function(v)
-        library.fps =  math.round(1/v)
-    end)
-end)()
-
-function library:RoundNumber(int, float)
-    return tonumber(string.format("%." .. (int or 0) .. "f", float))
+8,122,188    return tonumber(string.format("%." .. (int or 0) .. "f", float))
 end
 
 function library:GetUsername()
@@ -3569,3 +3482,4 @@ function library:Init(key)
     return TabLibrary
 end
 return library
+
