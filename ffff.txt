@@ -764,7 +764,7 @@ function library:Introduction()
     hashLogo.Size = UDim2.new(0, 150, 0, 150)
     hashLogo.Visible = true
     hashLogo.Image = "http://www.roblox.com/asset/?id=9365069861"
-    hashLogo.ImageColor3 = Color3.fromRGB(159, 115, 255)
+    hashLogo.ImageColor3 = Color3.fromRGB(8,122,188)
     hashLogo.ImageTransparency = 1
     
     xsx.Name = "xsx"
@@ -841,7 +841,32 @@ function library:Init(key)
         end
     end
 
-    local title = library.title
+    local baseTitle = library.title or "hermes.vip"
+local typeSpeed = 0.05
+local blinkSpeed = 0.5
+local cursor = "▌"
+
+task.spawn(function()
+    -- Typewriter
+    library:Text("")
+    for i = 1, #baseTitle do
+        library:Text(baseTitle:sub(1, i) .. cursor)
+        task.wait(typeSpeed)
+    end
+
+    -- Blinking cursor loop
+    local visible = true
+    while true do
+        if visible then
+            library:Text(baseTitle .. cursor)
+        else
+            library:Text(baseTitle)
+        end
+        visible = not visible
+        task.wait(blinkSpeed)
+    end
+end)
+
     key = key or Enum.KeyCode.RightAlt
 
     local screen = Instance.new("ScreenGui")
