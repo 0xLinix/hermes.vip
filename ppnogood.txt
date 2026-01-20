@@ -1,5 +1,5 @@
 -- =====================================================
--- hermes.vip ESP MODULE (SKELETON + ARROWS)
+-- hermes.vip ESP MODULE (FULL REWRITE)
 -- =====================================================
 
 local Players = game:GetService("Players")
@@ -15,12 +15,12 @@ ESP.Enabled = false
 -- =====================================================
 ESP.Settings = {
     Boxes = true,
-    Chams = false,
-    Skeleton = false,
     Names = true,
     Distance = true,
     HealthBars = true,
+    Skeleton = false,
     Arrows = false,
+    Chams = false,
     Priority = false,
 }
 
@@ -32,101 +32,67 @@ ESP.Colors = {
     Arrow = Color3.fromRGB(255, 255, 0),
 }
 
-ESP.Priority = {}
+ESP.PriorityPlayers = {}
 
 -- =====================================================
--- INTERNAL STATE
+-- INTERNAL STORAGE
 -- =====================================================
 local Drawings = {}
-local Connections = {}
 
 -- =====================================================
 -- UTILS
 -- =====================================================
-local function Alive(plr)
-    local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
-    return hum and hum.Health > 0
+local function IsAlive(plr)
+    local c = plr.Character
+    local h = c and c:FindFirstChildOfClass("Humanoid")
+    return h and h.Health > 0
 end
 
-local function Enemy(plr)
+local function IsEnemy(plr)
+    if not plr.Team or not LocalPlayer.Team then
+        return true
+    end
     return plr.Team ~= LocalPlayer.Team
 end
 
-local function W2S(pos)
-    local v, on = Camera:WorldToViewportPoint(pos)
-    return Vector2.new(v.X, v.Y), on, v.Z
+local function GetColor(plr)
+    if ESP.Settings.Priority and ESP.PriorityPlayers[plr] then
+        return Color3.fromRGB(255, 0, 255)
+    end
+    return IsEnemy(plr) and ESP.Colors.Enemy or ESP.Colors.Team
 end
 
-local function NewDraw(t)
-    local d = Drawing.new(t)
-    d.Visible = false
-    return d
+local function Create(type, props)
+    local obj = Drawing.new(type)
+    for i,v in pairs(props or {}) do
+        obj[i] = v
+    end
+    return obj
 end
 
 -- =====================================================
--- SKELETON SETUP
+-- PLAYER SETUP
 -- =====================================================
-local R15_BONES = {
-    {"Head","UpperTorso"},
-    {"UpperTorso","LowerTorso"},
-    {"UpperTorso","LeftUpperArm"},
-    {"LeftUpperArm","LeftLowerArm"},
-    {"LeftLowerArm","LeftHand"},
-    {"UpperTorso","RightUpperArm"},
-    {"RightUpperArm","RightLowerArm"},
-    {"RightLowerArm","RightHand"},
-    {"LowerTorso","LeftUpperLeg"},
-    {"LeftUpperLeg","LeftLowerLeg"},
-    {"LowerTorso","RightUpperLeg"},
-    {"RightUpperLeg","RightLowerLeg"},
-}
+local function SetupPlayer(plr)
+    if plr == LocalPlayer then return end
 
-local R6_BONES = {
-    {"Head","Torso"},
-    {"Torso","Left Arm"},
-    {"Torso","Right Arm"},
-    {"Torso","Left Leg"},
-    {"Torso","Right Leg"},
-}
-
--- =====================================================
--- CREATE / REMOVE
--- =====================================================
-local function Create(plr)
     Drawings[plr] = {
-        Box = NewDraw("Square"),
-        BoxOutline = NewDraw("Square"),
-        Name = NewDraw("Text"),
-        Health = NewDraw("Line"),
-        Arrow = NewDraw("Triangle"),
+        Box = Create("Square", {Thickness = 1, Filled = false, Visible = false}),
+        Name = Create("Text", {Size = 13, Center = true, Outline = true, Visible = false}),
+        Distance = Create("Text", {Size = 13, Center = true, Outline = true, Visible = false}),
+        Health = Create("Line", {Thickness = 2, Visible = false}),
+        Arrow = Create("Triangle", {Filled = true, Visible = false}),
         Skeleton = {},
     }
-
-    local d = Drawings[plr]
-
-    d.Box.Thickness = 1
-    d.BoxOutline.Thickness = 3
-    d.BoxOutline.Color = Color3.new(0,0,0)
-
-    d.Name.Size = 13
-    d.Name.Center = true
-    d.Name.Outline = true
-
-    d.Health.Thickness = 2
-
-    d.Arrow.Filled = true
-    d.Arrow.Thickness = 1
 end
 
-local function Remove(plr)
+local function RemovePlayer(plr)
     if Drawings[plr] then
-        for _, obj in pairs(Drawings[plr]) do
-            if typeof(obj) == "table" then
-                for _, l in pairs(obj) do
-                    l:Remove()
-                end
-            else
-                obj:Remove()
+        for _,v in pairs(Drawings[plr]) do
+            if typeof(v) == "table" then
+                for _,l in pairs(v) do l:Remove() end
+            elseif v.Remove then
+                v:Remove()
             end
         end
         Drawings[plr] = nil
@@ -134,125 +100,181 @@ local function Remove(plr)
 end
 
 -- =====================================================
--- UPDATE LOOP
+-- SKELETON
 -- =====================================================
-local function Update()
-    local screen = Camera.ViewportSize / 2
+local SkeletonPairs = {
+    {"Head","UpperTorso"},
+    {"UpperTorso","LowerTorso"},
+    {"UpperTorso","LeftUpperArm"},
+    {"LeftUpperArm","LeftLowerArm"},
+    {"UpperTorso","RightUpperArm"},
+    {"RightUpperArm","RightLowerArm"},
+    {"LowerTorso","LeftUpperLeg"},
+    {"LeftUpperLeg","LeftLowerLeg"},
+    {"LowerTorso","RightUpperLeg"},
+    {"RightUpperLeg","RightLowerLeg"},
+}
 
-    for plr, esp in pairs(Drawings) do
-        if plr ~= LocalPlayer and Alive(plr) then
-            local char = plr.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if not hrp or not hum then continue end
-
-            local pos, on, depth = W2S(hrp.Position)
-            local color = Enemy(plr) and ESP.Colors.Enemy or ESP.Colors.Team
-
-            -- BOX
-            if ESP.Settings.Boxes and on then
-                local h = math.clamp(3000 / depth, 40, 300)
-                local w = h * 0.6
-                esp.Box.Size = Vector2.new(w,h)
-                esp.Box.Position = pos - Vector2.new(w/2,h/2)
-                esp.Box.Color = color
-                esp.Box.Visible = true
-                esp.BoxOutline.Size = esp.Box.Size
-                esp.BoxOutline.Position = esp.Box.Position
-                esp.BoxOutline.Visible = true
+local function DrawSkeleton(plr, char, color)
+    local skel = Drawings[plr].Skeleton
+    for i,pair in ipairs(SkeletonPairs) do
+        local a = char:FindFirstChild(pair[1])
+        local b = char:FindFirstChild(pair[2])
+        if a and b then
+            local pa, va = Camera:WorldToViewportPoint(a.Position)
+            local pb, vb = Camera:WorldToViewportPoint(b.Position)
+            skel[i] = skel[i] or Create("Line",{Thickness=1})
+            if va and vb then
+                skel[i].From = Vector2.new(pa.X, pa.Y)
+                skel[i].To = Vector2.new(pb.X, pb.Y)
+                skel[i].Color = ESP.Colors.Skeleton
+                skel[i].Visible = ESP.Enabled and ESP.Settings.Skeleton
             else
-                esp.Box.Visible = false
-                esp.BoxOutline.Visible = false
-            end
-
-            -- NAME + DISTANCE
-            if ESP.Settings.Names and on then
-                local dist = math.floor((hrp.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude)
-                esp.Name.Text = plr.Name .. (ESP.Settings.Distance and (" ["..dist.."]") or "")
-                esp.Name.Position = pos - Vector2.new(0, esp.Box.Size.Y/2 + 14)
-                esp.Name.Color = color
-                esp.Name.Visible = true
-            else
-                esp.Name.Visible = false
-            end
-
-            -- HEALTH
-            if ESP.Settings.HealthBars and on then
-                local hp = hum.Health / hum.MaxHealth
-                local top = esp.Box.Position
-                local bot = top + Vector2.new(0, esp.Box.Size.Y)
-                esp.Health.From = bot
-                esp.Health.To = bot:Lerp(top, hp)
-                esp.Health.Color = ESP.Colors.Health
-                esp.Health.Visible = true
-            else
-                esp.Health.Visible = false
-            end
-
-            -- SKELETON
-            for _, l in pairs(esp.Skeleton) do l.Visible = false end
-            if ESP.Settings.Skeleton and on then
-                local rig = hum.RigType == Enum.HumanoidRigType.R15 and R15_BONES or R6_BONES
-                for i,b in ipairs(rig) do
-                    local a = char:FindFirstChild(b[1])
-                    local c = char:FindFirstChild(b[2])
-                    if a and c then
-                        local p1,o1 = W2S(a.Position)
-                        local p2,o2 = W2S(c.Position)
-                        if o1 and o2 then
-                            local line = esp.Skeleton[i] or NewDraw("Line")
-                            esp.Skeleton[i] = line
-                            line.From = p1
-                            line.To = p2
-                            line.Color = ESP.Colors.Skeleton
-                            line.Thickness = 2
-                            line.Visible = true
-                        end
-                    end
-                end
-            end
-
-            -- ARROWS (OFFSCREEN)
-            esp.Arrow.Visible = false
-            if ESP.Settings.Arrows and not on then
-                local dir = (pos - screen).Unit
-                local size = 18
-                local base = screen + dir * (screen.Y - 30)
-                esp.Arrow.PointA = base
-                esp.Arrow.PointB = base + Vector2.new(-dir.Y, dir.X) * size
-                esp.Arrow.PointC = base + Vector2.new(dir.Y, -dir.X) * size
-                esp.Arrow.Color = ESP.Colors.Arrow
-                esp.Arrow.Visible = true
+                skel[i].Visible = false
             end
         end
     end
 end
 
 -- =====================================================
--- PUBLIC API
+-- UPDATE LOOP
 -- =====================================================
-function ESP:SetPriority(tbl)
-    ESP.Priority = tbl or {}
-end
-
-function ESP:Enable()
-    if ESP.Enabled then return end
-    ESP.Enabled = true
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then Create(plr) end
+RunService.RenderStepped:Connect(function()
+    if not ESP.Enabled then
+        for _,objs in pairs(Drawings) do
+            for _,v in pairs(objs) do
+                if typeof(v) == "table" then
+                    for _,l in pairs(v) do l.Visible = false end
+                elseif v.Visible ~= nil then
+                    v.Visible = false
+                end
+            end
+        end
+        return
     end
 
-    Connections.Added = Players.PlayerAdded:Connect(Create)
-    Connections.Removed = Players.PlayerRemoving:Connect(Remove)
-    Connections.Render = RunService.RenderStepped:Connect(Update)
+    for plr,objs in pairs(Drawings) do
+        if not IsAlive(plr) then
+            for _,v in pairs(objs) do
+                if v.Visible ~= nil then v.Visible = false end
+            end
+            continue
+        end
+
+        local char = plr.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local head = char and char:FindFirstChild("Head")
+        if not hrp or not head then continue end
+
+        local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+        if not onScreen then
+            objs.Box.Visible = false
+            objs.Name.Visible = false
+            objs.Distance.Visible = false
+            objs.Health.Visible = false
+            objs.Arrow.Visible = ESP.Settings.Arrows
+            if ESP.Settings.Arrows then
+                local dir = (hrp.Position - Camera.CFrame.Position).Unit
+                local angle = math.atan2(dir.Z, dir.X)
+                local center = Camera.ViewportSize / 2
+                local r = 200
+                local p = Vector2.new(
+                    center.X + math.cos(angle) * r,
+                    center.Y + math.sin(angle) * r
+                )
+                objs.Arrow.PointA = p
+                objs.Arrow.PointB = p + Vector2.new(-8, -12)
+                objs.Arrow.PointC = p + Vector2.new(8, -12)
+                objs.Arrow.Color = ESP.Colors.Arrow
+                objs.Arrow.Visible = true
+            end
+            continue
+        end
+
+        local color = GetColor(plr)
+
+        -- BOX
+        if ESP.Settings.Boxes then
+            objs.Box.Size = Vector2.new(40, 60)
+            objs.Box.Position = Vector2.new(pos.X - 20, pos.Y - 30)
+            objs.Box.Color = color
+            objs.Box.Visible = true
+        else
+            objs.Box.Visible = false
+        end
+
+        -- NAME
+        if ESP.Settings.Names then
+            objs.Name.Text = plr.Name
+            objs.Name.Position = Vector2.new(pos.X, pos.Y - 45)
+            objs.Name.Color = color
+            objs.Name.Visible = true
+        else
+            objs.Name.Visible = false
+        end
+
+        -- DISTANCE
+        if ESP.Settings.Distance then
+            local dist = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude)
+            objs.Distance.Text = dist .. "m"
+            objs.Distance.Position = Vector2.new(pos.X, pos.Y + 35)
+            objs.Distance.Color = Color3.new(1,1,1)
+            objs.Distance.Visible = true
+        else
+            objs.Distance.Visible = false
+        end
+
+        -- HEALTH
+        if ESP.Settings.HealthBars then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            local hp = hum.Health / hum.MaxHealth
+            objs.Health.From = Vector2.new(pos.X - 25, pos.Y + 30)
+            objs.Health.To = Vector2.new(pos.X - 25 + (50 * hp), pos.Y + 30)
+            objs.Health.Color = ESP.Colors.Health
+            objs.Health.Visible = true
+        else
+            objs.Health.Visible = false
+        end
+
+        -- SKELETON
+        if ESP.Settings.Skeleton then
+            DrawSkeleton(plr, char, color)
+        else
+            for _,l in pairs(objs.Skeleton) do l.Visible = false end
+        end
+    end
+end)
+
+-- =====================================================
+-- PUBLIC API
+-- =====================================================
+function ESP:Enable()
+    ESP.Enabled = true
 end
 
 function ESP:Disable()
     ESP.Enabled = false
-    for _, c in pairs(Connections) do c:Disconnect() end
-    table.clear(Connections)
-    for plr in pairs(Drawings) do Remove(plr) end
 end
 
+function ESP:SetPriority(list)
+    ESP.PriorityPlayers = {}
+    for _,name in ipairs(list or {}) do
+        local p = Players:FindFirstChild(name)
+        if p then ESP.PriorityPlayers[p] = true end
+    end
+end
+
+-- =====================================================
+-- PLAYER HOOKS
+-- =====================================================
+for _,p in ipairs(Players:GetPlayers()) do
+    SetupPlayer(p)
+end
+
+Players.PlayerAdded:Connect(SetupPlayer)
+Players.PlayerRemoving:Connect(RemovePlayer)
+
+-- =====================================================
+-- RETURN (DO NOT REMOVE)
+-- =====================================================
 return ESP
