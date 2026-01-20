@@ -3230,7 +3230,7 @@ function library:Init(key)
 
             sliderButton.Name = "sliderButton"
             sliderButton.Parent = sliderFolder
-            sliderButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            sliderButton.BackgroundColor3 = Color3.fromRGB(8,122,188)
             sliderButton.Position = UDim2.new(0.348484844, 0, 0.600000024, 0)
             sliderButton.Size = UDim2.new(0, 396, 0, 16)
             sliderButton.AutoButtonColor = false
@@ -3245,7 +3245,7 @@ function library:Init(key)
 
             sliderBackground.Name = "sliderBackground"
             sliderBackground.Parent = sliderButton
-            sliderBackground.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            sliderBackground.BackgroundColor3 = Color3.fromRGB(8,122,188)
             sliderBackground.Size = UDim2.new(0, 394, 0, 14)
             sliderBackground.ClipsDescendants = true
 
@@ -3475,7 +3475,7 @@ function library:Init(key)
 
             rightBar.Name = "rightBar"
             rightBar.Parent = sectionFrame
-            rightBar.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            rightBar.BackgroundColor3 = Color3.fromRGB(8,122,188)
             rightBar.BorderSizePixel = 0
             rightBar.Position = UDim2.new(0.308080822, 0, 0.479166657, 0)
             rightBar.Size = UDim2.new(0, 403, 0, 1)
@@ -3511,10 +3511,10 @@ function library:Init(key)
 
             for i,v in pairs(tabButtons:GetChildren()) do
                 if v:IsA("TextButton") then
-                    TweenService:Create(v, TweenTable["tab_text_colour"], {TextColor3 = Color3.fromRGB(170, 170, 170)}):Play()
+                    TweenService:Create(v, TweenTable["tab_text_colour"], {TextColor3 = Color3.fromRGB(8,122,188)}):Play()
                 end
             end
-            TweenService:Create(tabButton, TweenTable["tab_text_colour"], {TextColor3 = Color3.fromRGB(159, 115, 255)}):Play()
+            TweenService:Create(tabButton, TweenTable["tab_text_colour"], {TextColor3 = Color3.fromRGB(8,122,188)}):Play()
 
             return Components
         end
