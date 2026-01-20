@@ -1,11 +1,15 @@
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+local lp = Players.LocalPlayer
 
 local RANKS = {
-    [4986042426] = "creator", 
-    -- [123456789] = "admin",
-    -- [987654321] = "vip",
+    [1907324012] = "creator", -- YOU
 }
 
-local rank = RANKS[LocalPlayer.UserId] or "user"
-return rank
+local PRIORITY = {
+    [1907324012] = true, 
+}
+
+return {
+    rank = RANKS[lp.UserId] or "user",
+    priority = PRIORITY
+}
