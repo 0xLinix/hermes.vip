@@ -232,7 +232,7 @@ function library:Watermark(text)
     edge.Name = "edge"
     edge.Parent = watermark
     edge.AnchorPoint = Vector2.new(0.5, 0.5)
-    edge.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    edge.BackgroundColor3 = Color3.fromRGB(8,122,188)
     edge.Position = UDim2.new(0.5, 0, -0.03, 0)
     edge.Size = UDim2.new(0, 0, 0, 26)
     edge.BackgroundTransparency = 1
@@ -337,7 +337,7 @@ function library:Watermark(text)
         edge.Name = "edge"
         edge.Parent = watermark
         edge.AnchorPoint = Vector2.new(0.5, 0.5)
-        edge.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        edge.BackgroundColor3 = Color3.fromRGB(8,122,188)
         edge.Position = UDim2.new(0.5, 0, -0.03, 0)
         edge.Size = UDim2.new(0, 0, 0, 26)
         edge.BackgroundTransparency = 1
@@ -698,7 +698,7 @@ function library:Introduction()
     edge.Name = "edge"
     edge.Parent = introduction
     edge.AnchorPoint = Vector2.new(0.5, 0.5)
-    edge.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    edge.BackgroundColor3 = Color3.fromRGB(8,122,188)
     edge.BackgroundTransparency = 1
     edge.Position = UDim2.new(0.511773348, 0, 0.5, 0)
     edge.Size = UDim2.new(0, 300, 0, 308)
@@ -743,7 +743,7 @@ function library:Introduction()
     barLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     barLayout.SortOrder = Enum.SortOrder.LayoutOrder
     
-    xsxLogo.Name = "hermes"
+    xsxLogo.Name = "hermesloading"
     xsxLogo.Parent = background
     xsxLogo.AnchorPoint = Vector2.new(0.5, 0.5)
     xsxLogo.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -751,9 +751,9 @@ function library:Introduction()
     xsxLogo.Position = UDim2.new(0.5, 0, 0.5, 0)
     xsxLogo.Size = UDim2.new(0, 448, 0, 150)
     xsxLogo.Visible = true
-    xsxLogo.Image = "http://www.roblox.com/asset/?id=106108740849422"
-    xsxLogo.ImageColor3 = Color3.fromRGB(159, 115, 255)
-    xsxLogo.ImageTransparency = 0
+    xsxLogo.Image = "http://www.roblox.com/asset/?id=9365068051"
+    xsxLogo.ImageColor3 = Color3.fromRGB(8,122,188)
+    xsxLogo.ImageTransparency = 1
     
     hashLogo.Name = "hashLogo"
     hashLogo.Parent = background
@@ -767,9 +767,9 @@ function library:Introduction()
     hashLogo.ImageColor3 = Color3.fromRGB(159, 115, 255)
     hashLogo.ImageTransparency = 1
     
-    xsx.Name = "hermes.vip"
+    xsx.Name = "xsx"
     xsx.Parent = background
-    xsx.BackgroundColor3 = Color3.fromRGB(8,122,188)
+    xsx.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     xsx.BackgroundTransparency = 1.000
     xsx.Size = UDim2.new(0, 80, 0, 21)
     xsx.Font = Enum.Font.Code
@@ -841,27 +841,7 @@ function library:Init(key)
         end
     end
 
-   local titleText = "hermes.vip"
-local speed = 0.06
-
-task.spawn(function()
-    while true do
-        -- type
-        for i = 1, #titleText do
-            library:Text(titleText:sub(1, i) .. "▌")
-            task.wait(speed)
-        end
-
-        task.wait(1)
-
-        -- delete
-        for i = #titleText, 0, -1 do
-            library:Text(titleText:sub(1, i) .. "▌")
-            task.wait(speed / 1.5)
-        end
-    end
-end)
-
+    local title = library.title
     key = key or Enum.KeyCode.RightAlt
 
     local screen = Instance.new("ScreenGui")
@@ -3588,5 +3568,4 @@ end)
     end
     return TabLibrary
 end
-
 return library
