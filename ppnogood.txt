@@ -1,5 +1,5 @@
 -- =====================================================
--- hermes.vip ESP MODULE
+-- hermes.vip ESP MODULE (FINAL FIXED)
 -- =====================================================
 
 local Players = game:GetService("Players")
@@ -12,7 +12,7 @@ local ESP = {}
 ESP.Enabled = false
 
 -- =====================================================
--- SETTINGS (UI READS / WRITES THESE)
+-- SETTINGS (UI READS THESE)
 -- =====================================================
 ESP.Settings = {
     Boxes = true,
@@ -36,72 +36,64 @@ ESP.Colors = {
 ESP.Priority = {}
 
 -- =====================================================
--- INTERNAL STORAGE
+-- INTERNAL STATE
 -- =====================================================
 local Drawings = {}
 local Connections = {}
 
 -- =====================================================
--- UTILS
+-- UTIL
 -- =====================================================
-local function IsAlive(plr)
+local function Alive(plr)
     local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
     return hum and hum.Health > 0
 end
 
-local function IsEnemy(plr)
+local function Enemy(plr)
     return plr.Team ~= LocalPlayer.Team
 end
 
-local function WorldToScreen(pos)
-    local v, onScreen = Camera:WorldToViewportPoint(pos)
-    return Vector2.new(v.X, v.Y), onScreen, v.Z
+local function W2S(pos)
+    local v, on = Camera:WorldToViewportPoint(pos)
+    return Vector2.new(v.X, v.Y), on, v.Z
 end
 
--- =====================================================
--- DRAWING CREATION
--- =====================================================
-local function New(type)
-    local d = Drawing.new(type)
+local function NewDraw(t)
+    local d = Drawing.new(t)
     d.Visible = false
     return d
 end
 
-local function CreateESP(plr)
+-- =====================================================
+-- CREATE / REMOVE
+-- =====================================================
+local function Create(plr)
     Drawings[plr] = {
-        Box = New("Square"),
-        BoxOutline = New("Square"),
-        Name = New("Text"),
-        Health = New("Line"),
-        Skeleton = {},
-        Arrow = New("Triangle"),
+        Box = NewDraw("Square"),
+        BoxOutline = NewDraw("Square"),
+        Name = NewDraw("Text"),
+        Health = NewDraw("Line"),
     }
 
-    Drawings[plr].Box.Thickness = 1
-    Drawings[plr].Box.Filled = false
+    local d = Drawings[plr]
 
-    Drawings[plr].BoxOutline.Thickness = 3
-    Drawings[plr].BoxOutline.Color = Color3.new(0,0,0)
+    d.Box.Thickness = 1
+    d.Box.Filled = false
 
-    Drawings[plr].Name.Size = 13
-    Drawings[plr].Name.Center = true
-    Drawings[plr].Name.Outline = true
+    d.BoxOutline.Thickness = 3
+    d.BoxOutline.Color = Color3.new(0,0,0)
 
-    Drawings[plr].Health.Thickness = 2
+    d.Name.Size = 13
+    d.Name.Center = true
+    d.Name.Outline = true
 
-    Drawings[plr].Arrow.Filled = true
+    d.Health.Thickness = 2
 end
 
-local function RemoveESP(plr)
+local function Remove(plr)
     if Drawings[plr] then
         for _, obj in pairs(Drawings[plr]) do
-            if typeof(obj) == "table" then
-                for _, l in pairs(obj) do
-                    l:Remove()
-                end
-            else
-                obj:Remove()
-            end
+            obj:Remove()
         end
         Drawings[plr] = nil
     end
@@ -111,23 +103,23 @@ end
 -- UPDATE LOOP
 -- =====================================================
 local function Update()
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and Drawings[plr] and IsAlive(plr) then
+    for plr, esp in pairs(Drawings) do
+        if plr ~= LocalPlayer and Alive(plr) then
             local char = plr.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             local hum = char and char:FindFirstChildOfClass("Humanoid")
             if not hrp or not hum then continue end
 
-            local pos, onScreen, depth = WorldToScreen(hrp.Position)
-            local esp = Drawings[plr]
-            local enemy = IsEnemy(plr)
-            local color = enemy and ESP.Colors.Enemy or ESP.Colors.Team
+            local pos, on, depth = W2S(hrp.Position)
+            local color = Enemy(plr) and ESP.Colors.Enemy or ESP.Colors.Team
 
             -- BOX
-            if ESP.Settings.Boxes and onScreen then
-                local size = math.clamp(3000 / depth, 40, 300)
-                esp.Box.Size = Vector2.new(size * 0.6, size)
-                esp.Box.Position = pos - esp.Box.Size / 2
+            if ESP.Settings.Boxes and on then
+                local h = math.clamp(3000 / depth, 40, 300)
+                local w = h * 0.6
+
+                esp.Box.Size = Vector2.new(w, h)
+                esp.Box.Position = pos - Vector2.new(w/2, h/2)
                 esp.Box.Color = color
                 esp.Box.Visible = true
 
@@ -140,23 +132,23 @@ local function Update()
             end
 
             -- NAME + DISTANCE
-            if ESP.Settings.Names and onScreen then
+            if ESP.Settings.Names and on then
                 local dist = math.floor((hrp.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude)
-                esp.Name.Text = plr.Name .. (ESP.Settings.Distance and (" ["..dist.."m]") or "")
-                esp.Name.Position = pos - Vector2.new(0, esp.Box.Size.Y / 2 + 14)
+                esp.Name.Text = plr.Name .. (ESP.Settings.Distance and (" ["..dist.."]") or "")
+                esp.Name.Position = pos - Vector2.new(0, esp.Box.Size.Y/2 + 14)
                 esp.Name.Color = color
                 esp.Name.Visible = true
             else
                 esp.Name.Visible = false
             end
 
-            -- HEALTH BAR
-            if ESP.Settings.HealthBars and onScreen then
+            -- HEALTH
+            if ESP.Settings.HealthBars and on then
                 local hp = hum.Health / hum.MaxHealth
                 local top = esp.Box.Position
-                local bottom = top + Vector2.new(0, esp.Box.Size.Y)
-                esp.Health.From = bottom
-                esp.Health.To = bottom:Lerp(top, hp)
+                local bot = top + Vector2.new(0, esp.Box.Size.Y)
+                esp.Health.From = bot
+                esp.Health.To = bot:Lerp(top, hp)
                 esp.Health.Color = ESP.Colors.Health
                 esp.Health.Visible = true
             else
@@ -179,12 +171,12 @@ function ESP:Enable()
 
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer then
-            CreateESP(plr)
+            Create(plr)
         end
     end
 
-    Connections.PlayerAdded = Players.PlayerAdded:Connect(CreateESP)
-    Connections.PlayerRemoving = Players.PlayerRemoving:Connect(RemoveESP)
+    Connections.Added = Players.PlayerAdded:Connect(Create)
+    Connections.Removed = Players.PlayerRemoving:Connect(Remove)
     Connections.Render = RunService.RenderStepped:Connect(Update)
 end
 
@@ -197,7 +189,7 @@ function ESP:Disable()
     table.clear(Connections)
 
     for plr in pairs(Drawings) do
-        RemoveESP(plr)
+        Remove(plr)
     end
 end
 
