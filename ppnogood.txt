@@ -1,11 +1,10 @@
 -- =====================================================
--- hermes.vip ESP MODULE (FINAL FIXED)
+-- hermes.vip ESP MODULE (SKELETON + ARROWS)
 -- =====================================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
-
 local LocalPlayer = Players.LocalPlayer
 
 local ESP = {}
@@ -42,7 +41,7 @@ local Drawings = {}
 local Connections = {}
 
 -- =====================================================
--- UTIL
+-- UTILS
 -- =====================================================
 local function Alive(plr)
     local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
@@ -65,6 +64,32 @@ local function NewDraw(t)
 end
 
 -- =====================================================
+-- SKELETON SETUP
+-- =====================================================
+local R15_BONES = {
+    {"Head","UpperTorso"},
+    {"UpperTorso","LowerTorso"},
+    {"UpperTorso","LeftUpperArm"},
+    {"LeftUpperArm","LeftLowerArm"},
+    {"LeftLowerArm","LeftHand"},
+    {"UpperTorso","RightUpperArm"},
+    {"RightUpperArm","RightLowerArm"},
+    {"RightLowerArm","RightHand"},
+    {"LowerTorso","LeftUpperLeg"},
+    {"LeftUpperLeg","LeftLowerLeg"},
+    {"LowerTorso","RightUpperLeg"},
+    {"RightUpperLeg","RightLowerLeg"},
+}
+
+local R6_BONES = {
+    {"Head","Torso"},
+    {"Torso","Left Arm"},
+    {"Torso","Right Arm"},
+    {"Torso","Left Leg"},
+    {"Torso","Right Leg"},
+}
+
+-- =====================================================
 -- CREATE / REMOVE
 -- =====================================================
 local function Create(plr)
@@ -73,13 +98,13 @@ local function Create(plr)
         BoxOutline = NewDraw("Square"),
         Name = NewDraw("Text"),
         Health = NewDraw("Line"),
+        Arrow = NewDraw("Triangle"),
+        Skeleton = {},
     }
 
     local d = Drawings[plr]
 
     d.Box.Thickness = 1
-    d.Box.Filled = false
-
     d.BoxOutline.Thickness = 3
     d.BoxOutline.Color = Color3.new(0,0,0)
 
@@ -88,12 +113,21 @@ local function Create(plr)
     d.Name.Outline = true
 
     d.Health.Thickness = 2
+
+    d.Arrow.Filled = true
+    d.Arrow.Thickness = 1
 end
 
 local function Remove(plr)
     if Drawings[plr] then
         for _, obj in pairs(Drawings[plr]) do
-            obj:Remove()
+            if typeof(obj) == "table" then
+                for _, l in pairs(obj) do
+                    l:Remove()
+                end
+            else
+                obj:Remove()
+            end
         end
         Drawings[plr] = nil
     end
@@ -103,6 +137,8 @@ end
 -- UPDATE LOOP
 -- =====================================================
 local function Update()
+    local screen = Camera.ViewportSize / 2
+
     for plr, esp in pairs(Drawings) do
         if plr ~= LocalPlayer and Alive(plr) then
             local char = plr.Character
@@ -117,12 +153,10 @@ local function Update()
             if ESP.Settings.Boxes and on then
                 local h = math.clamp(3000 / depth, 40, 300)
                 local w = h * 0.6
-
-                esp.Box.Size = Vector2.new(w, h)
-                esp.Box.Position = pos - Vector2.new(w/2, h/2)
+                esp.Box.Size = Vector2.new(w,h)
+                esp.Box.Position = pos - Vector2.new(w/2,h/2)
                 esp.Box.Color = color
                 esp.Box.Visible = true
-
                 esp.BoxOutline.Size = esp.Box.Size
                 esp.BoxOutline.Position = esp.Box.Position
                 esp.BoxOutline.Visible = true
@@ -154,6 +188,42 @@ local function Update()
             else
                 esp.Health.Visible = false
             end
+
+            -- SKELETON
+            for _, l in pairs(esp.Skeleton) do l.Visible = false end
+            if ESP.Settings.Skeleton and on then
+                local rig = hum.RigType == Enum.HumanoidRigType.R15 and R15_BONES or R6_BONES
+                for i,b in ipairs(rig) do
+                    local a = char:FindFirstChild(b[1])
+                    local c = char:FindFirstChild(b[2])
+                    if a and c then
+                        local p1,o1 = W2S(a.Position)
+                        local p2,o2 = W2S(c.Position)
+                        if o1 and o2 then
+                            local line = esp.Skeleton[i] or NewDraw("Line")
+                            esp.Skeleton[i] = line
+                            line.From = p1
+                            line.To = p2
+                            line.Color = ESP.Colors.Skeleton
+                            line.Thickness = 2
+                            line.Visible = true
+                        end
+                    end
+                end
+            end
+
+            -- ARROWS (OFFSCREEN)
+            esp.Arrow.Visible = false
+            if ESP.Settings.Arrows and not on then
+                local dir = (pos - screen).Unit
+                local size = 18
+                local base = screen + dir * (screen.Y - 30)
+                esp.Arrow.PointA = base
+                esp.Arrow.PointB = base + Vector2.new(-dir.Y, dir.X) * size
+                esp.Arrow.PointC = base + Vector2.new(dir.Y, -dir.X) * size
+                esp.Arrow.Color = ESP.Colors.Arrow
+                esp.Arrow.Visible = true
+            end
         end
     end
 end
@@ -170,9 +240,7 @@ function ESP:Enable()
     ESP.Enabled = true
 
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            Create(plr)
-        end
+        if plr ~= LocalPlayer then Create(plr) end
     end
 
     Connections.Added = Players.PlayerAdded:Connect(Create)
@@ -182,15 +250,9 @@ end
 
 function ESP:Disable()
     ESP.Enabled = false
-
-    for _, c in pairs(Connections) do
-        c:Disconnect()
-    end
+    for _, c in pairs(Connections) do c:Disconnect() end
     table.clear(Connections)
-
-    for plr in pairs(Drawings) do
-        Remove(plr)
-    end
+    for plr in pairs(Drawings) do Remove(plr) end
 end
 
 return ESP
