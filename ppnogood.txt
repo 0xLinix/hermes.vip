@@ -3,186 +3,176 @@ local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
 local CoreGui = game:GetService("CoreGui")
 
-local LocalPlayer = Players.LocalPlayer
+local LP = Players.LocalPlayer
 
-local ESP = {}
-ESP.Enabled = false
-ESP.Connections = {}
-ESP.Objects = {}
-ESP.Arrows = {}
+local ESP = {
+    Enabled = false,
+    Objects = {},
+    Connections = {},
+    Priority = {}
+}
 
 ESP.Settings = {
     Boxes = true,
+    Names = true,
+    Distance = true,
+    HealthBar = true,
+    Skeleton = true,
     Chams = true,
     Arrows = true,
     TeamCheck = true,
-    MaxDistance = 1500,
 }
 
-local function newSquare(props)
+-- ========= UTILS =========
+local function square(p)
     local s = Drawing.new("Square")
-    for k,v in pairs(props) do s[k] = v end
+    for k,v in pairs(p) do s[k]=v end
     return s
 end
 
-local function newTriangle(props)
-    local t = Drawing.new("Triangle")
-    for k,v in pairs(props) do t[k] = v end
+local function text(p)
+    local t = Drawing.new("Text")
+    for k,v in pairs(p) do t[k]=v end
     return t
 end
 
-local function disconnectAll(tbl)
-    for _,c in ipairs(tbl) do
-        c:Disconnect()
-    end
-    table.clear(tbl)
+local function line(p)
+    local l = Drawing.new("Line")
+    for k,v in pairs(p) do l[k]=v end
+    return l
 end
 
-local ChamsFolder = Instance.new("Folder")
+local ChamsFolder = Instance.new("Folder", CoreGui)
 ChamsFolder.Name = "hermes.vip_chams"
-ChamsFolder.Parent = CoreGui
 
-local function createChams(player)
-    local h = Instance.new("Highlight")
-    h.FillColor = Color3.fromRGB(255, 80, 80)
-    h.OutlineColor = Color3.fromRGB(255, 255, 255)
-    h.FillTransparency = 0.4
-    h.OutlineTransparency = 0
-    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    h.Parent = ChamsFolder
-    return h
-end
+-- ========= PLAYER SETUP =========
+local function setup(plr)
+    if plr == LP then return end
 
-local function setupPlayer(player)
-    if player == LocalPlayer then return end
-
-    ESP.Objects[player] = {
-        Box = newSquare({
-            Thickness = 1,
-            Filled = false,
-            Color = Color3.fromRGB(255,255,255),
-            Visible = false
-        }),
-        Arrow = newTriangle({
-            Filled = true,
-            Color = Color3.fromRGB(255,255,255),
-            Visible = false
-        }),
-        Chams = createChams(player)
+    ESP.Objects[plr] = {
+        Box = square({Thickness=1, Filled=false}),
+        Health = square({Thickness=1, Filled=true}),
+        Name = text({Size=13, Center=true, Outline=true}),
+        Dist = text({Size=13, Center=true, Outline=true}),
+        Skeleton = {
+            HeadTorso = line({Thickness=1}),
+            TorsoLeg = line({Thickness=1})
+        },
+        Chams = Instance.new("Highlight", ChamsFolder)
     }
 end
 
-local function removePlayer(player)
-    local obj = ESP.Objects[player]
-    if not obj then return end
-
-    for _,v in pairs(obj) do
+local function remove(plr)
+    local o = ESP.Objects[plr]
+    if not o then return end
+    for _,v in pairs(o) do
         if typeof(v) == "Instance" then
             v:Destroy()
+        elseif typeof(v) == "table" then
+            for _,l in pairs(v) do l:Remove() end
         else
             v:Remove()
         end
     end
-
-    ESP.Objects[player] = nil
+    ESP.Objects[plr] = nil
 end
 
-local function updateESP()
-    for player, data in pairs(ESP.Objects) do
-        local char = player.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        local hum = char and char:FindFirstChild("Humanoid")
-
-        if not char or not hrp or not hum or hum.Health <= 0 then
-            data.Box.Visible = false
-            data.Arrow.Visible = false
-            data.Chams.Enabled = false
+-- ========= UPDATE =========
+local function update()
+    for plr,o in pairs(ESP.Objects) do
+        local c = plr.Character
+        local hrp = c and c:FindFirstChild("HumanoidRootPart")
+        local hum = c and c:FindFirstChild("Humanoid")
+        if not c or not hrp or hum.Health <= 0 then
+            for _,v in pairs(o) do if v.Visible~=nil then v.Visible=false end end
+            o.Chams.Enabled=false
             continue
         end
 
-        if ESP.Settings.TeamCheck and player.Team == LocalPlayer.Team then
-            data.Box.Visible = false
-            data.Arrow.Visible = false
-            data.Chams.Enabled = false
+        if ESP.Settings.TeamCheck and plr.Team==LP.Team then
+            o.Chams.Enabled=false
             continue
         end
 
-        local distance = (Camera.CFrame.Position - hrp.Position).Magnitude
-        if distance > ESP.Settings.MaxDistance then
-            data.Box.Visible = false
-            data.Arrow.Visible = false
-            data.Chams.Enabled = false
+        local pos, onscreen = Camera:WorldToViewportPoint(hrp.Position)
+        if not onscreen then
+            o.Box.Visible=false
+            o.Chams.Enabled=false
             continue
+        end
+
+        local isPriority = ESP.Priority[plr.UserId]
+        local color = isPriority and Color3.fromRGB(255,50,50) or Color3.new(1,1,1)
+
+        -- BOX
+        if ESP.Settings.Boxes then
+            o.Box.Size=Vector2.new(40,60)
+            o.Box.Position=Vector2.new(pos.X-20,pos.Y-30)
+            o.Box.Color=color
+            o.Box.Visible=true
+        end
+
+        -- HEALTH
+        if ESP.Settings.HealthBar then
+            o.Health.Size=Vector2.new(3, -(hum.Health/100)*60)
+            o.Health.Position=Vector2.new(pos.X-25,pos.Y+30)
+            o.Health.Color=Color3.fromRGB(0,255,0)
+            o.Health.Visible=true
+        end
+
+        -- NAME
+        if ESP.Settings.Names then
+            o.Name.Text=plr.Name
+            o.Name.Position=Vector2.new(pos.X,pos.Y-40)
+            o.Name.Color=color
+            o.Name.Visible=true
+        end
+
+        -- DISTANCE
+        if ESP.Settings.Distance then
+            local d=math.floor((Camera.CFrame.Position-hrp.Position).Magnitude)
+            o.Dist.Text=d.."m"
+            o.Dist.Position=Vector2.new(pos.X,pos.Y+35)
+            o.Dist.Color=color
+            o.Dist.Visible=true
+        end
+
+        -- SKELETON
+        if ESP.Settings.Skeleton and c:FindFirstChild("Head") then
+            local head=Camera:WorldToViewportPoint(c.Head.Position)
+            o.Skeleton.HeadTorso.From=Vector2.new(head.X,head.Y)
+            o.Skeleton.HeadTorso.To=Vector2.new(pos.X,pos.Y)
+            o.Skeleton.HeadTorso.Visible=true
         end
 
         -- CHAMS
-        data.Chams.Enabled = ESP.Settings.Chams
-        data.Chams.Adornee = char
-
-        local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-
-        -- BOX
-        if ESP.Settings.Boxes and onScreen then
-            data.Box.Size = Vector2.new(40, 65)
-            data.Box.Position = Vector2.new(pos.X - 20, pos.Y - 32)
-            data.Box.Visible = true
-        else
-            data.Box.Visible = false
-        end
-
-        -- ARROW (OFFSCREEN)
-        if ESP.Settings.Arrows and not onScreen then
-            local dir = (hrp.Position - Camera.CFrame.Position).Unit
-            local angle = math.atan2(dir.Z, dir.X)
-
-            local center = Camera.ViewportSize / 2
-            local radius = 250
-
-            local arrowPos = Vector2.new(
-                center.X + math.cos(angle) * radius,
-                center.Y + math.sin(angle) * radius
-            )
-
-            data.Arrow.PointA = arrowPos
-            data.Arrow.PointB = arrowPos + Vector2.new(-10, -5)
-            data.Arrow.PointC = arrowPos + Vector2.new(-10, 5)
-            data.Arrow.Visible = true
-        else
-            data.Arrow.Visible = false
+        if ESP.Settings.Chams then
+            o.Chams.Adornee=c
+            o.Chams.FillColor=color
+            o.Chams.Enabled=true
         end
     end
+end
+
+-- ========= PUBLIC =========
+function ESP:SetPriority(tbl)
+    self.Priority=tbl
 end
 
 function ESP:Enable()
     if self.Enabled then return end
-    self.Enabled = true
-
-    for _,p in ipairs(Players:GetPlayers()) do
-        setupPlayer(p)
-    end
-
-    table.insert(self.Connections,
-        Players.PlayerAdded:Connect(setupPlayer)
-    )
-
-    table.insert(self.Connections,
-        Players.PlayerRemoving:Connect(removePlayer)
-    )
-
-    table.insert(self.Connections,
-        RunService.RenderStepped:Connect(updateESP)
-    )
+    self.Enabled=true
+    for _,p in ipairs(Players:GetPlayers()) do setup(p) end
+    table.insert(self.Connections,Players.PlayerAdded:Connect(setup))
+    table.insert(self.Connections,Players.PlayerRemoving:Connect(remove))
+    table.insert(self.Connections,RunService.RenderStepped:Connect(update))
 end
 
 function ESP:Disable()
-    if not self.Enabled then return end
-    self.Enabled = false
-
-    disconnectAll(self.Connections)
-
-    for p in pairs(self.Objects) do
-        removePlayer(p)
-    end
+    self.Enabled=false
+    for _,c in pairs(self.Connections) do c:Disconnect() end
+    table.clear(self.Connections)
+    for p in pairs(self.Objects) do remove(p) end
 end
 
 return ESP
