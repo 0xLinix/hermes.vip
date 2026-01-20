@@ -22,23 +22,28 @@ ESP.Colors = {
     Enemy = Color3.fromRGB(8,122,188),
     Team = Color3.fromRGB(8,122,188),
     Health = Color3.fromRGB(8,122,188),
-    NPC = Color3.fromRGB(255, 170, 0)
+    NPC = Color3.fromRGB(255,170,0)
 }
 
 -- ================= CACHE =================
 local Cache = {}
 
 -- ================= UTILS =================
+local function IsValidCharacter(model)
+    if not model or not model:IsA("Model") then return false end
+    if not model:FindFirstChildOfClass("Humanoid") then return false end
+    if not model:FindFirstChild("HumanoidRootPart") then return false end
+    return true
+end
+
 local function IsNPC(model)
-    return model
-        and model:IsA("Model")
-        and model:FindFirstChildOfClass("Humanoid")
+    return IsValidCharacter(model)
         and not Players:GetPlayerFromCharacter(model)
 end
 
 -- ================= CREATE =================
 local function Create(model, isNPC)
-    if Cache[model] then return end
+    if Cache[model] or not IsValidCharacter(model) then return end
 
     local h = Instance.new("Highlight")
     h.Enabled = false
@@ -80,36 +85,31 @@ end
 local function Update(model)
     local obj = Cache[model]
     if not obj then return end
-
-    local char = model
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-
-    if not ESP.Enabled or not hum or not hrp then
+    if not IsValidCharacter(model) then
         Hide(obj)
         return
     end
+
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    local hrp = model:FindFirstChild("HumanoidRootPart")
 
     if ESP.Settings.HealthCheck and hum.Health <= 0 then
         Hide(obj)
         return
     end
 
-    local plr = Players:GetPlayerFromCharacter(char)
+    local plr = Players:GetPlayerFromCharacter(model)
 
-    if plr and ESP.Settings.TeamCheck and plr.Team == LocalPlayer.Team then
+    if plr and ESP.Settings.TeamCheck and LocalPlayer.Team == plr.Team then
         Hide(obj)
         return
     end
 
-    -- COLOR PICK
-    local color =
-        obj.NPC and ESP.Colors.NPC or
-        (plr and ESP.Colors.Enemy or ESP.Colors.Enemy)
+    local color = obj.NPC and ESP.Colors.NPC or ESP.Colors.Enemy
 
     -- HIGHLIGHT
     if ESP.Settings.Boxes then
-        obj.Highlight.Adornee = char
+        obj.Highlight.Adornee = model
         obj.Highlight.FillColor = color
         obj.Highlight.OutlineColor = color
         obj.Highlight.Enabled = true
@@ -117,7 +117,7 @@ local function Update(model)
         obj.Highlight.Enabled = false
     end
 
-    -- TEXT BUILD
+    -- TEXT
     local lines = {}
 
     if ESP.Settings.Names then
@@ -150,7 +150,7 @@ function ESP:Enable()
     if self.Enabled then return end
     self.Enabled = true
 
-    -- Players
+    -- PLAYERS
     for _,p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
             Create(p.Character, false)
@@ -163,16 +163,11 @@ function ESP:Enable()
         end)
     end)
 
-    -- NPCs
+    -- NPCs (SAFE)
     if ESP.Settings.NPCCheck then
-        for _,m in ipairs(Workspace:GetDescendants()) do
-            if IsNPC(m) then
-                Create(m, true)
-            end
-        end
-
         Workspace.DescendantAdded:Connect(function(m)
-            if ESP.Settings.NPCCheck and IsNPC(m) then
+            if IsNPC(m) then
+                task.wait(0.1)
                 Create(m, true)
             end
         end)
