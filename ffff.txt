@@ -1,4 +1,3 @@
-
 -- / Locals
 local Workspace = game:GetService("Workspace")
 local Player = game:GetService("Players").LocalPlayer
@@ -3055,10 +3054,10 @@ function library:Init(key)
                 optionButton.MouseButton1Click:Connect(function()
                     for z,x in next, selectorContainer:GetChildren() do
                         if x:IsA("TextButton") then
-                            TweenService:Create(x, TweenTable["selector"], {TextColor3 = Color3.fromRGB(160, 160, 160)}):Play()
+                            TweenService:Create(x, TweenTable["selector"], {TextColor3 = Color3.fromRGB(8,122,188)}):Play()
                         end
                     end
-                    TweenService:Create(optionButton, TweenTable["selector"], {TextColor3 = Color3.fromRGB(159, 115, 255)}):Play()
+                    TweenService:Create(optionButton, TweenTable["selector"], {TextColor3 = Color3.fromRGB(8,122,188)}):Play()
                     selectorText.Text = optionButton.Text
                     callback(optionButton.Text)
                 end)
